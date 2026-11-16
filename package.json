@@ -1,0 +1,77 @@
+{
+  "name": "smart-invoice-pro",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "dev:api": "tsx watch server/index.js",
+    "start:api": "node server/index.js",
+    "db:migrate": "tsx server/migrate.js",
+    "db:backup": "node server/backup-cli.js backup",
+    "db:restore": "node server/backup-cli.js restore",
+    "desktop:dev": "electron desktop",
+    "desktop:dist": "node scripts/package-desktop.js",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cookie-parser": "^1.4.7",
+    "dotenv": "^18.0.10",
+    "express": "^5.3.0",
+    "express-rate-limit": "^8.7.4",
+    "helmet": "^8.3.0",
+    "lucide-react": "^0.468.0",
+    "mysql2": "^3.24.6",
+    "pdf-lib": "^1.17.1",
+    "pdfkit": "^0.20.2",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^45.3.3",
+    "electron-builder": "^26.18.0",
+    "tsx": "^4.23.15",
+    "typescript": "~5.7.2",
+    "vite": "^6.0.7"
+  },
+  "overrides": {
+    "minimatch": "11.0.8"
+  },
+  "build": {
+    "appId": "com.ekbtech.smartinvoicepro",
+    "productName": "Smart Invoice Pro",
+    "directories": {
+      "app": "desktop",
+      "output": "release"
+    },
+    "files": [
+      "main.cjs",
+      "package.json",
+      "app-url.json"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  },
+  "allowScripts": {
+    "electron@45.3.3": true
+  }
+}
