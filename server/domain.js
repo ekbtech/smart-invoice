@@ -14,7 +14,7 @@ export const businessUserSchema = z.object({
   fullName: z.string().trim().min(2).max(160),
   email: z.string().trim().email().max(254).transform((value) => value.toLowerCase()),
   password: z.string().min(4).max(128).refine((value) => Buffer.byteLength(value, "utf8") <= 72, "Password must be 72 UTF-8 bytes or fewer."),
-  role: z.enum(["finance_manager", "accountant", "sales_officer", "cashier", "auditor"]),
+  role: z.enum(["admin", "finance_manager", "accountant", "sales_officer", "cashier", "auditor"]),
 });
 
 export const loginSchema = z.object({

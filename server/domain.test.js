@@ -12,7 +12,7 @@ test("business admin-created accounts accept a four-character password and norma
   assert.equal(businessUserSchema.parse(input).email, "evans@example.com");
   assert.equal(businessUserSchema.safeParse({ ...input, password: "123" }).success, false);
   assert.equal(businessUserSchema.safeParse({ ...input, role: "owner" }).success, false);
-  assert.equal(businessUserSchema.safeParse({ ...input, role: "admin" }).success, false);
+  assert.equal(businessUserSchema.safeParse({ ...input, role: "admin" }).success, true);
   assert.equal(registerSchema.safeParse({
     businessName: "Lumina Studio", fullName: input.fullName, email: input.email, password: input.password,
   }).success, true);

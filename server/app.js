@@ -30,6 +30,10 @@ export function createApp() {
     next();
   });
 
+  app.get("/", (_request, response) => {
+    response.redirect(302, config.appOrigin);
+  });
+
   app.get("/api/health", async (_request, response) => {
     await pool.query("SELECT 1");
     response.json({ data: { status: "ok", database: "connected" } });

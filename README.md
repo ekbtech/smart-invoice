@@ -42,6 +42,7 @@ Requirements: Node.js 22.12 or newer, npm, and Docker Desktop with its engine ru
    ```
 
 The Vite development server proxies `/api` requests to `http://localhost:3001`. The API listens on port 3001 by default.
+Opening the API root (`http://localhost:3001/`) redirects to the configured frontend URL in `APP_ORIGIN`.
 
 To securely create the initial platform administrator from an interactive terminal, run:
 
