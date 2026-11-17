@@ -11,6 +11,7 @@
     "dev:api": "tsx watch server/index.js",
     "start:api": "node server/index.js",
     "admin:create": "node scripts/create-platform-admin.js",
+    "system:reset": "node scripts/reset-system.js",
     "db:migrate": "tsx server/migrate.js",
     "db:backup": "node server/backup-cli.js backup",
     "db:restore": "node server/backup-cli.js restore",

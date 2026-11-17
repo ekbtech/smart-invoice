@@ -3,7 +3,7 @@ import { HttpError } from "./errors.js";
 
 const rolePermissions = {
   owner: new Set(["*"]),
-  admin: new Set(["business:read", "business:update", "users:manage", "customers:write", "products:write", "invoices:write", "payments:write", "suppliers:write", "expenses:write", "reports:read", "audit:read"]),
+  admin: new Set(["*"]),
   finance_manager: new Set(["business:read", "customers:write", "products:write", "invoices:write", "payments:write", "suppliers:write", "expenses:write", "reports:read", "audit:read"]),
   accountant: new Set(["business:read", "customers:write", "products:write", "invoices:write", "payments:write", "suppliers:write", "expenses:write", "reports:read", "audit:read"]),
   sales_officer: new Set(["business:read", "customers:write", "products:write", "invoices:write", "reports:read"]),

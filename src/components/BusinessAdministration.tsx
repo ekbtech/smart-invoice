@@ -5,7 +5,6 @@ import { apiRequest } from "../lib/api";
 type Branch = { id: string; name: string; address: string | null; phone: string | null; isDefault: boolean };
 type Member = { id: string; fullName: string; email: string; role: string; joinedAt: string };
 const userRoles = [
-  ["admin", "Administrator"],
   ["finance_manager", "Finance manager"],
   ["accountant", "Accountant"],
   ["sales_officer", "Sales officer"],

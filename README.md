@@ -49,11 +49,19 @@ To securely create the initial platform administrator from an interactive termin
 npm run admin:create
 ```
 
-The command prompts for the administrator name, email, workspace name, and password. Password input is hidden and never passed as a command-line argument or written to `.env`. For an existing account, the command verifies its current password before granting access; otherwise, it creates an initial business **Admin** account and a starter workspace. It adds the email to `PLATFORM_ADMIN_EMAILS` in `.env` for platform settings. Restart the API after setup so it reloads the allowlist. Workspace user creation is authorized by the business **Admin** role, not by platform administrator access. Protect the terminal and server configuration as administrator credentials.
+For a fresh installation, the command prompts for the administrator name, email, workspace name, and password. Password input is hidden and never passed as a command-line argument or written to `.env`. It creates an initial business **Admin** account and starter workspace, then adds the email to `PLATFORM_ADMIN_EMAILS` for system-wide administration. Restart the API after setup so it reloads the allowlist.
+
+To erase all current user accounts and business data and replace them with a single general administrator, stop the API and frontend, then run:
+
+```powershell
+npm run system:reset
+```
+
+The reset asks you to type the configured database name and securely prompts for the new administrator credentials. It transactionally deletes business data and existing user/admin accounts, keeps the database schema and subscription plan definitions, creates one workspace, assigns the new account the full business Admin role, and replaces the platform-admin allowlist with only that email. Restart the API and frontend afterward. This operation is irreversible; make an encrypted backup first if you might need existing records.
 
 ## Implemented
 
-- Business Admin-created workspace accounts, login sessions, business role checks, and MFA setup, verification, recovery-code, and disable flows. Public self-registration is disabled; platform administrator access alone cannot create workspace users.
+- Business Admin-created workspace accounts, login sessions, business role checks, and MFA setup, verification, recovery-code, and disable flows. The Admin role has full business permissions; public self-registration is disabled.
 - Customer and product management, invoices and invoice numbering, issue/void workflows, partial payments, quotations and conversion, adjustment notes, branches, notifications, reports, and audit records.
 - Tenant-scoped supplier records and expense management, including edits, supplier archiving, expense voiding, input-VAT calculation, and audit events for record changes.
 - Period-based Tax Management reports for VAT collected (with proportional credit-note adjustments), input VAT recorded on expenses, and net VAT by currency, with downloadable CSV summaries.
@@ -64,7 +72,7 @@ The command prompts for the administrator name, email, workspace name, and passw
 - Proforma invoices with conversion into invoice drafts, and manageable invoice templates that can be selected for invoices and snapshotted when issued.
 - Business profile logo (PNG/JPEG, up to 2 MB) or complete letterhead (single-page PDF, PNG, or JPEG, up to 5 MB) uploads; the two are mutually exclusive. Invoice, receipt, and delivery-note PDFs use the selected branding. Logo use requires business name, email, phone, and address; a complete letterhead can be used without entering those details.
 - Delivery notes created after an invoice is issued, with delivered quantities, recipient and address, delivery date, notes, and printable signature fields.
-- Settings screens for branches and team access review/removal. Only the workspace Admin role can create user accounts within that business.
+- Settings screens for branches and team access review/removal. Only the workspace Admin role can create non-admin user accounts within that business; platform-wide administration is separately allowlisted.
 - Recurring invoice schedules with weekly/monthly/quarterly/yearly dates, pause/resume, safe monthly date anchoring, and a MySQL-locking background worker that issues due invoices and records audit/notification entries.
 - Server-generated invoice PDFs and payment receipts, with tenant-scoped download routes; downloadable invoice, payment, outstanding-balance, and tax-summary CSV exports.
 - Subscription plan visibility, starter/professional/business/enterprise plan configuration, invoice and user caps, read-only access for expired/suspended subscriptions, and an environment-allowlisted platform administrator console for plans and subscription status.

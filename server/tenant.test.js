@@ -39,3 +39,9 @@ test("only the business admin role can create user accounts", () => {
   requireBusinessAdmin({ tenant: { role: "admin" } }, {}, (value) => { error = value; });
   assert.equal(error, undefined);
 });
+
+test("the business admin role has all workspace permissions", () => {
+  for (const permission of ["business:delete", "users:manage", "invoices:write", "expenses:write", "audit:read"]) {
+    assert.equal(authorize("admin", permission), undefined, `admin should have ${permission}`);
+  }
+});
