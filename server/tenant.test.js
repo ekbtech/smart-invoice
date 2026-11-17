@@ -20,3 +20,11 @@ test("read-only roles do not gain write access", () => {
   assert.equal(authorize("auditor", "invoices:write")?.code, "PERMISSION_DENIED");
   assert.equal(authorize("cashier", "invoices:write")?.code, "PERMISSION_DENIED");
 });
+
+test("finance roles manage suppliers and expenses while auditors have read-only access", () => {
+  assert.equal(authorize("accountant", "expenses:write"), undefined);
+  assert.equal(authorize("finance_manager", "suppliers:read"), undefined);
+  assert.equal(authorize("auditor", "expenses:read"), undefined);
+  assert.equal(authorize("auditor", "suppliers:write")?.code, "PERMISSION_DENIED");
+  assert.equal(authorize("sales_officer", "expenses:read")?.code, "PERMISSION_DENIED");
+});

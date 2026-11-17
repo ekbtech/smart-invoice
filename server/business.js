@@ -4,7 +4,7 @@ import express, { Router } from "express";
 import { z } from "zod";
 import { writeAudit } from "./audit.js";
 import { pool, inTransaction } from "./db.js";
-import { calculateInvoice, createInvoiceSchema, customerSchema, paymentSchema, productSchema, tenantSettingsSchema } from "./domain.js";
+import { calculateExpenseTax, calculateInvoice, createInvoiceSchema, customerSchema, expenseSchema, paymentSchema, productSchema, supplierSchema, tenantSettingsSchema } from "./domain.js";
 import { HttpError } from "./errors.js";
 import { detectLetterheadMimeType, detectLogoMimeType } from "./branding.js";
 import { createDeliveryNotePdf, createInvoicePdf, createReceiptPdf } from "./pdf.js";
@@ -18,6 +18,14 @@ const listQuerySchema = z.object({
   search: z.string().trim().max(120).optional().default(""),
   limit: z.coerce.number().int().min(1).max(100).default(50),
   offset: z.coerce.number().int().min(0).default(0),
+});
+const taxRangeSchema = z.object({
+  from: z.string().date().optional(),
+  to: z.string().date().optional(),
+}).superRefine((value, context) => {
+  if (value.from && value.to && value.from > value.to) {
+    context.addIssue({ code: "custom", path: ["from"], message: "The start date must be on or before the end date." });
+  }
 });
 const deliveryNoteSchema = z.object({
   deliveryDate: z.string().date(),
@@ -55,6 +63,60 @@ function csvCell(value) {
 function csvResponse(response, filename, headers, rows) {
   const content = [headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\r\n");
   response.status(200).type("text/csv").attachment(filename).send(`\uFEFF${content}\r\n`);
+}
+
+async function taxSummaryRows(tenantId, range) {
+  const invoiceFilters = [];
+  const invoiceParams = [tenantId];
+  const expenseFilters = [];
+  const expenseParams = [tenantId];
+  for (const [field, operator] of [["from", ">="], ["to", "<="]]) {
+    if (!range[field]) continue;
+    invoiceFilters.push(`i.issue_date ${operator} ?`);
+    invoiceParams.push(range[field]);
+    expenseFilters.push(`e.expense_date ${operator} ?`);
+    expenseParams.push(range[field]);
+  }
+  const [invoiceRows] = await pool.execute(
+    `SELECT i.currency,
+            SUM(GREATEST(0, i.tax_cents - CASE WHEN i.total_cents > 0
+              THEN ROUND(i.tax_cents * LEAST(i.total_cents, COALESCE(credits.amount_cents, 0)) / i.total_cents)
+              ELSE 0 END)) AS vatCollectedCents,
+            COUNT(*) AS invoiceCount
+     FROM invoices i
+     LEFT JOIN (
+       SELECT tenant_id, invoice_id, SUM(amount_cents) AS amount_cents
+       FROM credit_notes WHERE status = 'issued' GROUP BY tenant_id, invoice_id
+     ) credits ON credits.tenant_id = i.tenant_id AND credits.invoice_id = i.id
+     WHERE i.tenant_id = ? AND i.status = 'issued'${invoiceFilters.length ? ` AND ${invoiceFilters.join(" AND ")}` : ""}
+     GROUP BY i.currency`,
+    invoiceParams,
+  );
+  const [expenseRows] = await pool.execute(
+    `SELECT currency, SUM(tax_cents) AS vatPaidCents, COUNT(*) AS expenseCount
+     FROM expenses e
+     WHERE e.tenant_id = ? AND e.voided_at IS NULL${expenseFilters.length ? ` AND ${expenseFilters.join(" AND ")}` : ""}
+     GROUP BY currency`,
+    expenseParams,
+  );
+  const result = new Map();
+  for (const row of invoiceRows) {
+    result.set(row.currency, {
+      currency: row.currency, vatCollectedCents: Number(row.vatCollectedCents ?? 0),
+      vatPaidCents: 0, netVatCents: Number(row.vatCollectedCents ?? 0),
+      invoiceCount: Number(row.invoiceCount), expenseCount: 0,
+    });
+  }
+  for (const row of expenseRows) {
+    const summary = result.get(row.currency) ?? {
+      currency: row.currency, vatCollectedCents: 0, vatPaidCents: 0, netVatCents: 0, invoiceCount: 0, expenseCount: 0,
+    };
+    summary.vatPaidCents = Number(row.vatPaidCents ?? 0);
+    summary.netVatCents = summary.vatCollectedCents - summary.vatPaidCents;
+    summary.expenseCount = Number(row.expenseCount);
+    result.set(row.currency, summary);
+  }
+  return [...result.values()].sort((left, right) => left.currency.localeCompare(right.currency));
 }
 
 function invoiceStatus(invoice) {
@@ -1444,6 +1506,181 @@ router.post("/branches", requirePermission("business:update"), requirePlanFeatur
   response.status(201).json({ data: { id, ...input, isDefault: false } });
 });
 
+router.get("/suppliers", requirePermission("suppliers:read"), async (request, response) => {
+  const { limit, offset, search } = pageQuery(request);
+  const term = `%${search}%`;
+  const [rows] = await pool.execute(
+    `SELECT id, name, email, phone, tax_pin AS taxPin, address, notes, created_at AS createdAt
+     FROM suppliers
+     WHERE tenant_id = ? AND archived_at IS NULL
+       AND (? = '' OR CONCAT_WS(' ', name, email, phone, tax_pin) LIKE ?)
+     ORDER BY name, created_at DESC LIMIT ? OFFSET ?`,
+    [request.tenant.id, search, term, limit, offset],
+  );
+  response.json({ data: rows, meta: { limit, offset } });
+});
+
+router.post("/suppliers", requirePermission("suppliers:write"), async (request, response) => {
+  const input = supplierSchema.parse(request.body);
+  const id = randomUUID();
+  await inTransaction(async (connection) => {
+    await connection.execute(
+      `INSERT INTO suppliers (id, tenant_id, name, email, phone, tax_pin, address, notes, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, request.tenant.id, input.name, input.email || null, input.phone || null, input.taxPin || null,
+        input.address || null, input.notes || null, request.auth.userId],
+    );
+    await writeAudit(connection, {
+      tenantId: request.tenant.id, userId: request.auth.userId, action: "supplier.created",
+      entityType: "supplier", entityId: id,
+    });
+  });
+  response.status(201).json({ data: { id, ...input, createdAt: new Date().toISOString() } });
+});
+
+router.patch("/suppliers/:id", requirePermission("suppliers:write"), async (request, response) => {
+  const id = routeId(request.params.id);
+  const input = supplierSchema.parse(request.body);
+  await inTransaction(async (connection) => {
+    const [existing] = await connection.execute(
+      "SELECT id FROM suppliers WHERE tenant_id = ? AND id = ? AND archived_at IS NULL FOR UPDATE",
+      [request.tenant.id, id],
+    );
+    if (!existing.length) throw new HttpError(404, "SUPPLIER_NOT_FOUND", "Supplier not found.");
+    await connection.execute(
+      `UPDATE suppliers SET name = ?, email = ?, phone = ?, tax_pin = ?, address = ?, notes = ?
+       WHERE tenant_id = ? AND id = ? AND archived_at IS NULL`,
+      [input.name, input.email || null, input.phone || null, input.taxPin || null, input.address || null,
+        input.notes || null, request.tenant.id, id],
+    );
+    await writeAudit(connection, {
+      tenantId: request.tenant.id, userId: request.auth.userId, action: "supplier.updated",
+      entityType: "supplier", entityId: id,
+    });
+  });
+  response.json({ data: { id, ...input } });
+});
+
+router.post("/suppliers/:id/archive", requirePermission("suppliers:write"), async (request, response) => {
+  const id = routeId(request.params.id);
+  await inTransaction(async (connection) => {
+    const [result] = await connection.execute(
+      "UPDATE suppliers SET archived_at = UTC_TIMESTAMP(3) WHERE tenant_id = ? AND id = ? AND archived_at IS NULL",
+      [request.tenant.id, id],
+    );
+    if (!result.affectedRows) throw new HttpError(404, "SUPPLIER_NOT_FOUND", "Supplier not found.");
+    await writeAudit(connection, {
+      tenantId: request.tenant.id, userId: request.auth.userId, action: "supplier.archived",
+      entityType: "supplier", entityId: id,
+    });
+  });
+  response.json({ data: { id, archived: true } });
+});
+
+router.get("/expenses", requirePermission("expenses:read"), async (request, response) => {
+  const { limit, offset, search } = pageQuery(request);
+  const term = `%${search}%`;
+  const [rows] = await pool.execute(
+    `SELECT e.id, e.supplier_id AS supplierId, s.name AS supplierName, e.expense_date AS expenseDate,
+            e.category, e.description, e.reference, e.subtotal_cents AS subtotalCents,
+            e.tax_rate_bps AS taxRateBps, e.tax_cents AS taxCents, e.currency,
+            e.created_at AS createdAt
+     FROM expenses e
+     LEFT JOIN suppliers s ON s.tenant_id = e.tenant_id AND s.id = e.supplier_id
+     WHERE e.tenant_id = ? AND e.voided_at IS NULL
+       AND (? = '' OR CONCAT_WS(' ', e.category, e.description, e.reference, s.name) LIKE ?)
+     ORDER BY e.expense_date DESC, e.created_at DESC LIMIT ? OFFSET ?`,
+    [request.tenant.id, search, term, limit, offset],
+  );
+  response.json({
+    data: rows.map((row) => ({
+      ...row,
+      subtotalCents: Number(row.subtotalCents),
+      taxCents: Number(row.taxCents),
+      taxRateBps: Number(row.taxRateBps),
+    })),
+    meta: { limit, offset },
+  });
+});
+
+router.post("/expenses", requirePermission("expenses:write"), async (request, response) => {
+  const input = expenseSchema.parse(request.body);
+  const taxCents = calculateExpenseTax(input.subtotalCents, input.taxRateBps);
+  const id = randomUUID();
+  await inTransaction(async (connection) => {
+    if (input.supplierId) {
+      const [suppliers] = await connection.execute(
+        "SELECT id FROM suppliers WHERE tenant_id = ? AND id = ? AND archived_at IS NULL",
+        [request.tenant.id, input.supplierId],
+      );
+      if (!suppliers.length) throw new HttpError(400, "INVALID_SUPPLIER", "Choose an active supplier in this business.");
+    }
+    await connection.execute(
+      `INSERT INTO expenses
+         (id, tenant_id, supplier_id, expense_date, category, description, reference,
+          subtotal_cents, tax_rate_bps, tax_cents, currency, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, request.tenant.id, input.supplierId, input.expenseDate, input.category, input.description,
+        input.reference || null, input.subtotalCents, input.taxRateBps, taxCents, input.currency, request.auth.userId],
+    );
+    await writeAudit(connection, {
+      tenantId: request.tenant.id, userId: request.auth.userId, action: "expense.created",
+      entityType: "expense", entityId: id,
+      details: { supplierId: input.supplierId, subtotalCents: input.subtotalCents, taxCents, currency: input.currency },
+    });
+  });
+  response.status(201).json({ data: { id, ...input, taxCents, createdAt: new Date().toISOString() } });
+});
+
+router.patch("/expenses/:id", requirePermission("expenses:write"), async (request, response) => {
+  const id = routeId(request.params.id);
+  const input = expenseSchema.parse(request.body);
+  const taxCents = calculateExpenseTax(input.subtotalCents, input.taxRateBps);
+  await inTransaction(async (connection) => {
+    const [existing] = await connection.execute(
+      "SELECT id FROM expenses WHERE tenant_id = ? AND id = ? AND voided_at IS NULL FOR UPDATE",
+      [request.tenant.id, id],
+    );
+    if (!existing.length) throw new HttpError(404, "EXPENSE_NOT_FOUND", "Expense not found.");
+    if (input.supplierId) {
+      const [suppliers] = await connection.execute(
+        "SELECT id FROM suppliers WHERE tenant_id = ? AND id = ? AND archived_at IS NULL",
+        [request.tenant.id, input.supplierId],
+      );
+      if (!suppliers.length) throw new HttpError(400, "INVALID_SUPPLIER", "Choose an active supplier in this business.");
+    }
+    await connection.execute(
+      `UPDATE expenses SET supplier_id = ?, expense_date = ?, category = ?, description = ?, reference = ?,
+              subtotal_cents = ?, tax_rate_bps = ?, tax_cents = ?, currency = ?
+       WHERE tenant_id = ? AND id = ? AND voided_at IS NULL`,
+      [input.supplierId, input.expenseDate, input.category, input.description, input.reference || null,
+        input.subtotalCents, input.taxRateBps, taxCents, input.currency, request.tenant.id, id],
+    );
+    await writeAudit(connection, {
+      tenantId: request.tenant.id, userId: request.auth.userId, action: "expense.updated",
+      entityType: "expense", entityId: id,
+      details: { supplierId: input.supplierId, subtotalCents: input.subtotalCents, taxCents, currency: input.currency },
+    });
+  });
+  response.json({ data: { id, ...input, taxCents } });
+});
+
+router.post("/expenses/:id/void", requirePermission("expenses:write"), async (request, response) => {
+  const id = routeId(request.params.id);
+  await inTransaction(async (connection) => {
+    const [result] = await connection.execute(
+      "UPDATE expenses SET voided_at = UTC_TIMESTAMP(3) WHERE tenant_id = ? AND id = ? AND voided_at IS NULL",
+      [request.tenant.id, id],
+    );
+    if (!result.affectedRows) throw new HttpError(404, "EXPENSE_NOT_FOUND", "Expense not found.");
+    await writeAudit(connection, {
+      tenantId: request.tenant.id, userId: request.auth.userId, action: "expense.voided",
+      entityType: "expense", entityId: id,
+    });
+  });
+  response.json({ data: { id, voided: true } });
+});
+
 router.get("/notifications", async (request, response) => {
   const { limit, offset } = pageQuery(request);
   const [rows] = await pool.execute(
@@ -1815,6 +2052,22 @@ router.get("/reports/summary", requirePermission("reports:read"), requirePlanFea
       })),
     },
   });
+});
+
+router.get("/reports/tax-summary", requirePermission("reports:read"), requirePlanFeature("reports"), async (request, response) => {
+  const range = taxRangeSchema.parse(request.query);
+  response.json({ data: await taxSummaryRows(request.tenant.id, range) });
+});
+
+router.get("/reports/exports/tax-management", requirePermission("reports:read"), requirePlanFeature("reports"), async (request, response) => {
+  const range = taxRangeSchema.parse(request.query);
+  const summaries = await taxSummaryRows(request.tenant.id, range);
+  const headers = [
+    "from", "to", "currency", "vat_collected_cents", "vat_paid_cents", "net_vat_cents", "invoice_count", "expense_count",
+  ];
+  csvResponse(response, `tax-management-${new Date().toISOString().slice(0, 10)}.csv`, headers,
+    summaries.map((row) => [range.from ?? "", range.to ?? "", row.currency, row.vatCollectedCents, row.vatPaidCents,
+      row.netVatCents, row.invoiceCount, row.expenseCount]));
 });
 
 router.get("/reports/exports/:report", requirePermission("reports:read"), requirePlanFeature("reports"), async (request, response) => {

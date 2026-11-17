@@ -1,16 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { calculateInvoice, createInvoiceSchema, registerSchema } from "./domain.js";
+import { calculateExpenseTax, calculateInvoice, createInvoiceSchema, expenseSchema, registerSchema, supplierSchema } from "./domain.js";
 
-test("register requires a strong password and normalizes email", () => {
+test("register accepts a four-character password and normalizes email", () => {
   const input = {
     businessName: "Lumina Studio",
     fullName: "Evans Kimani",
     email: "  EVANS@example.com ",
-    password: "a-secure-passphrase",
+    password: "1234",
   };
   assert.equal(registerSchema.parse(input).email, "evans@example.com");
-  assert.equal(registerSchema.safeParse({ ...input, password: "weak" }).success, false);
+  assert.equal(registerSchema.safeParse({ ...input, password: "123" }).success, false);
 });
 
 test("invoice calculation uses integer cents and configured VAT", () => {
@@ -49,4 +49,22 @@ test("invoice input rejects excessive quantity precision and empty line items", 
   };
   assert.equal(createInvoiceSchema.safeParse(invoice).success, false);
   assert.equal(createInvoiceSchema.safeParse({ ...invoice, items: [] }).success, false);
+});
+
+test("supplier and expense inputs are validated and normalized", () => {
+  assert.equal(supplierSchema.parse({ name: "  Office Co " }).name, "Office Co");
+  assert.equal(supplierSchema.safeParse({ name: "", email: "not-an-email" }).success, false);
+  const expense = expenseSchema.parse({
+    expenseDate: "2026-03-10", category: "Supplies", description: "Printer paper",
+    subtotalCents: 10000, taxRateBps: 1600, currency: "KES",
+  });
+  assert.equal(expense.supplierId, null);
+  assert.equal(expenseSchema.safeParse({ ...expense, taxRateBps: 10001 }).success, false);
+  assert.equal(expenseSchema.safeParse({ ...expense, currency: "KES-1" }).success, false);
+});
+
+test("input VAT uses integer-cent rounding", () => {
+  assert.equal(calculateExpenseTax(10001, 1600), 1600);
+  assert.equal(calculateExpenseTax(1, 5000), 1);
+  assert.equal(calculateExpenseTax(10000, 0), 0);
 });

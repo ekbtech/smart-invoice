@@ -44,10 +44,24 @@ Requirements: Node.js 22.12 or newer, npm, and Docker Desktop with its engine ru
 
 The Vite development server proxies `/api` requests to `http://localhost:3001`. The API listens on port 3001 by default.
 
+To securely create a platform-wide administrator from an interactive terminal, run:
+
+```powershell
+npm run admin:create
+```
+
+The command prompts for the administrator name, email, workspace name, and password. Password input is hidden and never passed as a command-line argument or written to `.env`. For an existing account, the command verifies its current password before granting access; otherwise, it creates an owner account and a starter workspace. It adds the email to `PLATFORM_ADMIN_EMAILS` in `.env`. Restart the API after setup so it reloads the allowlist. Protect the terminal and server configuration as administrator credentials.
+
 ## Implemented
 
 - Tenant-aware registration, login sessions, business creation, team invitations, role checks, and MFA setup, verification, recovery-code, and disable flows.
 - Customer and product management, invoices and invoice numbering, issue/void workflows, partial payments, quotations and conversion, adjustment notes, branches, notifications, reports, and audit records.
+- Tenant-scoped supplier records and expense management, including edits, supplier archiving, expense voiding, input-VAT calculation, and audit events for record changes.
+- Period-based Tax Management reports for VAT collected (with proportional credit-note adjustments), input VAT recorded on expenses, and net VAT by currency, with downloadable CSV summaries.
+- Built-in rule-based Smart Tools for overdue and near-due invoice follow-up, plus an Integrations screen that clearly marks external services as disconnected.
+- Security & Audit Logs screen with account MFA controls and a recent business activity log; access to audit records follows tenant role permissions.
+- Admin navigation with the requested sidebar destinations, a responsive top quick-navigation bar, a full Notifications page, and quick links to quotations, proformas, adjustment notes, and recurring invoices.
+- A dedicated Subscription Plan destination in both sidebar and top navigation, with direct access to current plan, billing status, usage, available plans, and the platform-admin exemption notice.
 - Proforma invoices with conversion into invoice drafts, and manageable invoice templates that can be selected for invoices and snapshotted when issued.
 - Business profile logo (PNG/JPEG, up to 2 MB) or complete letterhead (single-page PDF, PNG, or JPEG, up to 5 MB) uploads; the two are mutually exclusive. Invoice, receipt, and delivery-note PDFs use the selected branding. Logo use requires business name, email, phone, and address; a complete letterhead can be used without entering those details.
 - Delivery notes created after an invoice is issued, with delivered quantities, recipient and address, delivery date, notes, and printable signature fields.
@@ -99,7 +113,7 @@ npm run db:restore -- --file .\backups\smart-invoice-2026-01-31.sipbackup --conf
 
 Replace `smart_invoice_pro` with the exact `DB_NAME` configured in `.env`. Restore refuses a database containing business data, authenticates the complete encrypted file before changing the database, and rolls back on errors. It restores database rows only; any externally stored files must be backed up separately.
 
-The numbered MySQL migrations through `007_letterhead_delivery_notes.sql` define the current schema. The API health check and targeted database-backed workflows have passed; this is not a comprehensive integration suite. Do not use this build for live financial data until the remaining gaps are addressed and the deployment is independently reviewed.
+The numbered MySQL migrations through `008_suppliers_expenses.sql` define the current schema. The API health check and targeted database-backed workflows have passed; this is not a comprehensive integration suite. Do not use this build for live financial data until the remaining gaps are addressed and the deployment is independently reviewed.
 
 Run the current automated tests and frontend production build with:
 

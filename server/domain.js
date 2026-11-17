@@ -4,7 +4,7 @@ export const registerSchema = z.object({
   businessName: z.string().trim().min(2).max(160),
   fullName: z.string().trim().min(2).max(160),
   email: z.string().trim().email().max(254).transform((value) => value.toLowerCase()),
-  password: z.string().min(12).max(128).refine((value) => Buffer.byteLength(value, "utf8") <= 72, "Password must be 72 UTF-8 bytes or fewer."),
+  password: z.string().min(4).max(128).refine((value) => Buffer.byteLength(value, "utf8") <= 72, "Password must be 72 UTF-8 bytes or fewer."),
   phone: z.string().trim().max(40).optional().default(""),
   address: z.string().trim().max(500).optional().default(""),
   kraPin: z.string().trim().max(24).optional().default(""),
@@ -32,6 +32,30 @@ export const productSchema = z.object({
   unitPriceCents: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
   taxRateBps: z.number().int().min(0).max(10000).nullable().optional(),
 });
+
+export const supplierSchema = z.object({
+  name: z.string().trim().min(1).max(160),
+  email: z.union([z.string().trim().email().max(254), z.literal("")]).optional().default(""),
+  phone: z.string().trim().max(40).optional().default(""),
+  taxPin: z.string().trim().max(24).optional().default(""),
+  address: z.string().trim().max(500).optional().default(""),
+  notes: z.string().trim().max(2000).optional().default(""),
+});
+
+export const expenseSchema = z.object({
+  supplierId: z.string().uuid().nullable().optional().default(null),
+  expenseDate: z.string().date(),
+  category: z.string().trim().min(1).max(100),
+  description: z.string().trim().min(1).max(500),
+  reference: z.string().trim().max(120).optional().default(""),
+  subtotalCents: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
+  taxRateBps: z.number().int().min(0).max(10000).default(0),
+  currency: z.string().regex(/^[A-Z]{3}$/),
+});
+
+export function calculateExpenseTax(subtotalCents, taxRateBps) {
+  return Number((BigInt(subtotalCents) * BigInt(taxRateBps) + 5000n) / 10000n);
+}
 
 const invoiceItemSchema = z.object({
   productId: z.string().uuid().nullable().optional(),

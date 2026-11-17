@@ -1,0 +1,42 @@
+CREATE TABLE suppliers (
+  id CHAR(36) NOT NULL PRIMARY KEY,
+  tenant_id CHAR(36) NOT NULL,
+  name VARCHAR(160) NOT NULL,
+  email VARCHAR(254) NULL,
+  phone VARCHAR(40) NULL,
+  tax_pin VARCHAR(24) NULL,
+  address VARCHAR(500) NULL,
+  notes VARCHAR(2000) NULL,
+  created_by CHAR(36) NOT NULL,
+  archived_at DATETIME(3) NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  UNIQUE KEY uq_suppliers_tenant_id (tenant_id, id),
+  KEY ix_suppliers_tenant_active (tenant_id, archived_at, name),
+  CONSTRAINT fk_suppliers_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+  CONSTRAINT fk_suppliers_creator FOREIGN KEY (tenant_id, created_by) REFERENCES memberships(tenant_id, user_id)
+) ENGINE=InnoDB;
+
+CREATE TABLE expenses (
+  id CHAR(36) NOT NULL PRIMARY KEY,
+  tenant_id CHAR(36) NOT NULL,
+  supplier_id CHAR(36) NULL,
+  expense_date DATE NOT NULL,
+  category VARCHAR(100) NOT NULL,
+  description VARCHAR(500) NOT NULL,
+  reference VARCHAR(120) NULL,
+  subtotal_cents BIGINT UNSIGNED NOT NULL,
+  tax_rate_bps SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+  tax_cents BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  currency CHAR(3) NOT NULL,
+  created_by CHAR(36) NOT NULL,
+  voided_at DATETIME(3) NULL,
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  UNIQUE KEY uq_expenses_tenant_id (tenant_id, id),
+  KEY ix_expenses_tenant_date (tenant_id, expense_date, currency),
+  KEY ix_expenses_tenant_supplier (tenant_id, supplier_id),
+  CONSTRAINT fk_expenses_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+  CONSTRAINT fk_expenses_supplier FOREIGN KEY (tenant_id, supplier_id) REFERENCES suppliers(tenant_id, id),
+  CONSTRAINT fk_expenses_creator FOREIGN KEY (tenant_id, created_by) REFERENCES memberships(tenant_id, user_id)
+) ENGINE=InnoDB;

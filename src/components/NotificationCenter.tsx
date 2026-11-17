@@ -11,7 +11,7 @@ type Notification = {
   createdAt: string;
 };
 
-export default function NotificationCenter({ onClose }: { onClose: () => void }) {
+export default function NotificationCenter({ onClose, fullPage = false }: { onClose?: () => void; fullPage?: boolean }) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState("");
@@ -45,8 +45,9 @@ export default function NotificationCenter({ onClose }: { onClose: () => void })
   }
 
   return (
-    <section className="notification-center" aria-label="Notifications">
-      <header><span><Bell size={15} /> Notifications</span><button className="icon-button" aria-label="Close notifications" onClick={onClose}><X size={15} /></button></header>
+    <section className={`notification-center ${fullPage ? "notification-page" : ""}`} aria-label="Notifications">
+      {fullPage && <div className="page-heading"><div><div className="eyebrow">WORKSPACE UPDATES</div><h1>Notifications</h1><p>Important invoice and business activity for your workspace.</p></div></div>}
+      <header><span><Bell size={15} /> {fullPage ? "Recent notifications" : "Notifications"}</span>{onClose && <button className="icon-button" aria-label="Close notifications" onClick={onClose}><X size={15} /></button>}</header>
       {loading && <p className="notification-empty">Loading notifications…</p>}
       {error && <p className="security-error notification-error" role="alert">{error}</p>}
       {!loading && !error && notifications.length === 0 && <p className="notification-empty">You’re all caught up. New business alerts will appear here.</p>}

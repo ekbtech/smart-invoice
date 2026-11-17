@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import type { KeyboardEvent } from "react";
 import {
-  ArrowDownLeft, ArrowRight, ArrowUpRight, Bell, BriefcaseBusiness, CalendarClock, CalendarDays, Check, Download, FileMinus2,
+  ArrowDownLeft, ArrowRight, ArrowUpRight, Bell, BriefcaseBusiness, CalendarDays, Check, Download,
   ChevronDown, ChevronLeft, ChevronRight, CircleHelp, CreditCard, FileBarChart, FilePlus2,
   FileText, LayoutDashboard, LogOut, Menu, MoreHorizontal, Package, Plus, Search, Settings,
-  Palette, ShieldCheck, Sparkles, Sun, Users, WalletCards, X,
+  Palette, ShieldCheck, Sun, Users, WalletCards, X, Truck, Receipt, Lightbulb, Plug,
 } from "lucide-react";
 import AccountSecurity from "./components/AccountSecurity";
 import AdjustmentNotesPage from "./components/AdjustmentNotesPage";
@@ -12,6 +12,7 @@ import AuthPage from "./components/AuthPage";
 import BusinessAdministration from "./components/BusinessAdministration";
 import BusinessDialog from "./components/BusinessDialog";
 import BusinessBranding from "./components/BusinessBranding";
+import { ExpensesPage, IntegrationsPage, SecurityAuditPage, SmartToolsPage, SuppliersPage, TaxManagementPage } from "./components/BusinessModules";
 import DeliveryNoteDialog from "./components/DeliveryNoteDialog";
 import InvoiceDetail from "./components/InvoiceDetail";
 import InvoiceDialog from "./components/InvoiceDialog";
@@ -37,16 +38,33 @@ type AppMode = "checking" | "auth" | "demo" | "server" | "unavailable";
 
 const navigation: { label: View; icon: typeof LayoutDashboard; section: "main" | "manage" | "tools" }[] = [
   { label: "Dashboard", icon: LayoutDashboard, section: "main" },
-  { label: "Invoices", icon: FileText, section: "manage" },
+  { label: "Invoices", icon: FileText, section: "main" },
   { label: "Customers", icon: Users, section: "manage" },
   { label: "Products", icon: Package, section: "manage" },
   { label: "Payments", icon: CreditCard, section: "manage" },
-  { label: "Adjustments", icon: FileMinus2, section: "manage" },
-  { label: "Proformas", icon: FilePlus2, section: "manage" },
-  { label: "Recurring", icon: CalendarClock, section: "manage" },
-  { label: "Quotations", icon: FilePlus2, section: "tools" },
-  { label: "Reports", icon: FileBarChart, section: "tools" },
+  { label: "Expenses", icon: Receipt, section: "manage" },
+  { label: "Suppliers", icon: Truck, section: "manage" },
+  { label: "Reports", icon: FileBarChart, section: "manage" },
+  { label: "Tax management", icon: FileBarChart, section: "manage" },
+  { label: "Notifications", icon: Bell, section: "manage" },
+  { label: "Staff & User Management", icon: Users, section: "manage" },
+  { label: "Smart tools", icon: Lightbulb, section: "tools" },
+  { label: "Integrations", icon: Plug, section: "tools" },
+  { label: "Security & Audit Logs", icon: ShieldCheck, section: "tools" },
+  { label: "Subscription plan", icon: CreditCard, section: "tools" },
+  { label: "Settings", icon: Settings, section: "tools" },
   { label: "Platform admin", icon: ShieldCheck, section: "tools" },
+];
+
+const quickNavigation: { label: string; view: View }[] = [
+  { label: "Dashboard", view: "Dashboard" },
+  { label: "Invoice Management", view: "Invoices" },
+  { label: "Quotations", view: "Quotations" },
+  { label: "Proformas", view: "Proformas" },
+  { label: "Adjustments", view: "Adjustments" },
+  { label: "Recurring", view: "Recurring" },
+  { label: "Reports & Analytics", view: "Reports" },
+  { label: "Subscription Plan", view: "Subscription plan" },
 ];
 
 const colorNames = ["violet", "green", "pink", "blue"];
@@ -243,6 +261,7 @@ function App() {
   }, [toast]);
 
   const selectedInvoice = invoices.find((invoice) => invoice.id === selectedInvoiceId) ?? null;
+  const userRole = session?.tenants.find((tenant) => tenant.id === session.activeTenantId)?.role ?? "";
   const invoiceStats = useMemo(() => invoices.reduce((stats, invoice) => {
     const status = getInvoiceStatus(invoice);
     if (!invoice.isDraft && !invoice.isVoid) {
@@ -388,13 +407,6 @@ function App() {
     setPayments(initialPayments);
     setQuotations([]);
     showToast("Sample workspace restored.");
-  }
-
-  function openSubscriptionSettings() {
-    navigate("Settings");
-    window.setTimeout(() => {
-      document.getElementById("subscription")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 0);
   }
 
   function switchToAccount() {
@@ -718,7 +730,7 @@ function App() {
       <aside className={`sidebar ${sidebarOpen ? "sidebar-open" : ""} ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
         <div className="brand">
           <div className="brand-mark"><span /></div>
-          <div className="brand-copy"><strong>smartinvoice</strong><span>PRO WORKSPACE</span></div>
+          <div className="brand-copy"><strong>SMART INVOICE</strong><span>{mode === "server" ? "ADMIN PANEL" : "LOCAL DEMO"}</span></div>
           <button className="icon-button sidebar-close" aria-label="Close navigation" onClick={() => setSidebarOpen(false)}><X size={18} /></button>
         </div>
         <button className="workspace-switcher" onClick={() => session && session.tenants.length > 1 ? setDialog("workspace") : showToast("This workspace is your active business.")}>
@@ -727,26 +739,23 @@ function App() {
           <ChevronDown size={15} className="workspace-chevron" />
         </button>
         <nav className="sidebar-nav" aria-label="Main navigation">
-          <p className="nav-section">WORKSPACE</p>
-          {navigation.filter((item) => item.section === "main").map((item) => <NavButton key={item.label} item={item} active={view === item.label} onClick={() => navigate(item.label)} />)}
-          <p className="nav-section nav-section-spaced">MANAGE</p>
-          {navigation.filter((item) => item.section === "manage" && (item.label === "Invoices" || item.label === "Customers" || item.label === "Products" || item.label === "Payments" || mode === "server")).map((item) => <NavButton key={item.label} item={item} active={view === item.label} onClick={() => navigate(item.label)} badge={item.label === "Invoices" && invoiceStats.overdue > 0 ? String(invoiceStats.overdue) : undefined} />)}
-          <p className="nav-section nav-section-spaced">INSIGHTS</p>
-          {navigation.filter((item) => item.section === "tools" && (item.label !== "Platform admin" || isPlatformAdmin)).map((item) => <NavButton key={item.label} item={item} active={view === item.label} onClick={() => navigate(item.label)} />)}
+          {navigation.filter((item) => item.label !== "Platform admin" || isPlatformAdmin)
+            .filter((item) => mode === "server" || ["Dashboard", "Invoices", "Customers", "Products", "Payments", "Reports", "Settings", "Smart tools", "Subscription plan"].includes(item.label))
+            .filter((item) => !["Expenses", "Suppliers"].includes(item.label) || ["owner", "admin", "finance_manager", "accountant", "auditor"].includes(userRole))
+            .filter((item) => item.label !== "Tax management" || mode !== "server" || ["owner", "admin", "finance_manager", "accountant", "sales_officer", "auditor"].includes(userRole))
+            .filter((item) => item.label !== "Security & Audit Logs" || ["owner", "admin", "finance_manager", "accountant", "auditor"].includes(userRole))
+            .map((item) => <NavButton key={item.label} item={{ ...item, displayLabel: ({
+              Invoices: "Invoice Management",
+              Products: "Products & Services",
+              Reports: "Reports & Analytics",
+              "Tax management": "Tax Management",
+              "Smart tools": "AI Smart Tools",
+              "Subscription plan": "Subscription Plan",
+              Settings: "System Settings",
+            } as Partial<Record<View, string>>)[item.label] }} active={view === item.label || (item.label === "Invoices" && ["Proformas", "Quotations", "Recurring", "Adjustments"].includes(view))} onClick={() => navigate(item.label)} badge={item.label === "Invoices" && invoiceStats.overdue > 0 ? String(invoiceStats.overdue) : undefined} />)}
         </nav>
         <div className="sidebar-bottom">
-          <div className="plan-card">
-            <div className="plan-card-icon"><Sparkles size={16} /></div>
-            <strong>{mode === "server" ? "Business subscription" : "Sample workspace"}</strong>
-            <p>{mode === "server" ? "Review your current plan, billing status and usage." : "Explore sample invoices and payments. Changes stay on this device."}</p>
-            <button onClick={mode === "server" ? openSubscriptionSettings : restoreSampleWorkspace}>{mode === "server" ? "View subscription" : "Restore sample data"} <ArrowRight size={14} /></button>
-          </div>
-          <NavButton item={{ label: "Settings", icon: Settings }} active={view === "Settings"} onClick={() => navigate("Settings")} />
-          <div className="sidebar-user">
-            <Avatar name={session?.user.fullName ?? "Demo account"} color="blue" />
-            <div className="user-copy"><strong>{session?.user.fullName ?? "Demo account"}</strong><span>{session?.tenants.find((tenant) => tenant.id === session.activeTenantId)?.role ?? "Local demo"}</span></div>
-            <button className="icon-button user-menu" aria-label={mode === "server" ? "Sign out" : "Switch to real account"} onClick={mode === "server" ? () => void logout() : switchToAccount}>{mode === "server" ? <LogOut size={17} /> : <MoreHorizontal size={19} />}</button>
-          </div>
+          <button className="nav-item nav-item-logout" onClick={mode === "server" ? () => void logout() : switchToAccount} title="Logout"><LogOut size={18} strokeWidth={1.8} /><span>Logout</span></button>
         </div>
       </aside>
 
@@ -771,6 +780,14 @@ function App() {
           </div>
         </header>
 
+        <nav className="top-navigation" aria-label="Quick navigation">
+          <div className="top-navigation-links">
+            {quickNavigation.filter((item) => mode === "server" || ["Dashboard", "Invoice Management", "Quotations", "Reports & Analytics", "Subscription Plan"].includes(item.label))
+              .map((item) => <button key={item.view} className={`top-navigation-link ${view === item.view || (item.view === "Invoices" && ["Proformas", "Quotations", "Recurring", "Adjustments"].includes(view)) ? "top-navigation-link-active" : ""}`} onClick={() => navigate(item.view)}>{item.label}</button>)}
+            {isPlatformAdmin && <button className={`top-navigation-link ${view === "Platform admin" ? "top-navigation-link-active" : ""}`} onClick={() => navigate("Platform admin")}>Platform admin</button>}
+          </div>
+        </nav>
+
         <div className="content-area">
           {view === "Dashboard" && <Dashboard
             settings={settings} invoices={invoices} payments={payments} invoiceStats={invoiceStats} userName={session?.user.fullName ?? "Evans"}
@@ -785,13 +802,23 @@ function App() {
             const invoice = invoices.find((entry) => entry.id === payment.invoiceId);
             if (invoice) openInvoice(invoice);
           }} />}
+          {view === "Expenses" && mode === "server" && <ExpensesPage currency={settings.currency} canWrite={["owner", "admin", "finance_manager", "accountant"].includes(userRole)} />}
+          {view === "Suppliers" && mode === "server" && <SuppliersPage canWrite={["owner", "admin", "finance_manager", "accountant"].includes(userRole)} />}
           {view === "Adjustments" && mode === "server" && <AdjustmentNotesPage invoices={invoices} currency={settings.currency} canWrite={["owner", "admin", "finance_manager", "accountant", "sales_officer"].includes(session?.tenants.find((tenant) => tenant.id === session.activeTenantId)?.role ?? "")} onChanged={refreshServerWorkspace} />}
           {view === "Proformas" && mode === "server" && <ProformasPage customers={customers} products={products} currency={settings.currency} taxRateBps={settings.taxRateBps} canWrite={["owner", "admin", "finance_manager", "accountant", "sales_officer"].includes(session?.tenants.find((tenant) => tenant.id === session.activeTenantId)?.role ?? "")} onChanged={refreshServerWorkspace} />}
           {view === "Quotations" && <QuotationsPage quotations={quotations} onCreate={createQuotation} onConvert={convertQuotation} />}
           {view === "Recurring" && mode === "server" && <RecurringInvoicesPage customers={customers} products={products} currency={settings.currency} taxRateBps={settings.taxRateBps} />}
           {view === "Reports" && <ReportsPage invoices={invoices} payments={payments} currency={settings.currency} onExport={mode === "server" ? (report) => void downloadReport(report) : undefined} />}
+          {view === "Subscription plan" && mode === "server" && <SubscriptionPanel />}
+          {view === "Subscription plan" && mode !== "server" && <DemoSubscriptionPanel onSignIn={switchToAccount} />}
+          {view === "Notifications" && mode === "server" && <NotificationCenter fullPage />}
+          {view === "Tax management" && mode === "server" && <TaxManagementPage />}
+          {view === "Smart tools" && <SmartToolsPage invoices={invoices} payments={payments} currency={settings.currency} onInvoices={() => navigate("Invoices")} />}
+          {view === "Security & Audit Logs" && mode === "server" && ["owner", "admin", "finance_manager", "accountant", "auditor"].includes(userRole) && <SecurityAuditPage email={session?.user.email ?? ""} />}
+          {view === "Integrations" && mode === "server" && <IntegrationsPage />}
+          {view === "Staff & User Management" && mode === "server" && <><PageHeader eyebrow="PEOPLE & LOCATIONS" title="Staff & User Management" description="Manage business branches and invite or review team members." /><BusinessAdministration businessRole={userRole} /></>}
           {view === "Platform admin" && isPlatformAdmin && <PlatformAdminPage />}
-          {view === "Settings" && <SettingsPage settings={settings} serverMode={mode === "server"} userEmail={session?.user.email ?? ""} userRole={session?.tenants.find((tenant) => tenant.id === session.activeTenantId)?.role ?? ""} onChange={setSettings} onSave={async () => {
+          {view === "Settings" && <SettingsPage settings={settings} serverMode={mode === "server"} userEmail={session?.user.email ?? ""} userRole={userRole} onChange={setSettings} onSave={async () => {
             if (settings.logoUrl && (![settings.businessName, settings.email, settings.phone, settings.address].every((value) => value.trim())
               || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(settings.email))) {
               showToast("Complete the business name, valid email, phone number, and address before using a logo.");
@@ -822,9 +849,24 @@ function App() {
   );
 }
 
-function NavButton({ item, active, onClick, badge }: { item: { label: View; icon: typeof LayoutDashboard }; active: boolean; onClick: () => void; badge?: string }) {
+function NavButton({ item, active, onClick, badge }: { item: { label: View; icon: typeof LayoutDashboard; displayLabel?: string }; active: boolean; onClick: () => void; badge?: string }) {
   const Icon = item.icon;
-  return <button className={`nav-item ${active ? "nav-item-active" : ""}`} onClick={onClick} title={item.label}><Icon size={18} strokeWidth={1.8} /><span>{item.label}</span>{badge && <small>{badge}</small>}</button>;
+  const label = item.displayLabel ?? item.label;
+  return <button className={`nav-item ${active ? "nav-item-active" : ""}`} onClick={onClick} title={label}><Icon size={18} strokeWidth={1.8} /><span>{label}</span>{badge && <small>{badge}</small>}</button>;
+}
+
+function DemoSubscriptionPanel({ onSignIn }: { onSignIn: () => void }) {
+  return <>
+    <PageHeader eyebrow="PLANS & BILLING" title="Subscription Plan" description="Review the plan options and billing status for your business workspace." />
+    <section className="panel settings-section demo-subscription-panel">
+      <div className="panel-heading">
+        <div><h2>Sign in to view your subscription</h2><p>The local demo uses sample records and is not connected to a business account or billing plan.</p></div>
+        <span className="settings-section-icon"><CreditCard size={17} /></span>
+      </div>
+      <p className="settings-note">Your current plan, invoice and user limits, billing status, and administrator exemption are shown after you sign in to a real workspace.</p>
+      <button className="button button-primary" onClick={onSignIn}>Sign in to your business</button>
+    </section>
+  </>;
 }
 
 function searchScope(view: View) {
@@ -926,7 +968,7 @@ function InvoicesPage({ invoices, totalCount, search, statusFilter, setStatusFil
   invoices: Invoice[]; totalCount: number; search: string; statusFilter: StatusFilter; setStatusFilter: (filter: StatusFilter) => void; onNew: () => void; onOpen: (invoice: Invoice) => void;
 }) {
   return <>
-    <PageHeader eyebrow="BILLING" title="Invoices" description="Create, track and manage every customer invoice." action={<button className="button button-primary" onClick={onNew}><Plus size={17} /> New invoice</button>} />
+    <PageHeader eyebrow="BILLING" title="Invoice Management" description="Create, track and manage invoices, proformas, quotations, adjustments and recurring billing." action={<button className="button button-primary" onClick={onNew}><Plus size={17} /> New invoice</button>} />
     <div className="panel listing-panel">
       <div className="list-toolbar"><div className="filter-tabs" role="group" aria-label="Filter invoices by status">{statuses.map((status) => <button key={status} className={statusFilter === status ? "filter-tab active" : "filter-tab"} onClick={() => setStatusFilter(status)}>{status}{status === "All" && <span>{totalCount}</span>}</button>)}</div><button className="button button-quiet export-button" onClick={() => window.print()}><ArrowDownLeft size={15} /> Export / print</button></div>
       {invoices.length === 0 ? <EmptyState title={search ? "No invoices found" : "No invoices in this view"} description={search ? "Try a different search or status filter." : "Create your first invoice and it’ll show up here."} action={!search && <button className="button button-primary" onClick={onNew}><Plus size={16} /> Create invoice</button>} /> : <InvoiceTable invoices={invoices} onOpen={onOpen} />}
@@ -1021,7 +1063,7 @@ function ReportsPage({
 
 function SettingsPage({ settings, serverMode, userEmail, userRole, onChange, onSave, onReset }: { settings: AppSettings; serverMode: boolean; userEmail: string; userRole: string; onChange: (settings: AppSettings) => void; onSave: () => void; onReset: () => void }) {
   return <>
-    <PageHeader eyebrow="MAKE IT YOURS" title="Settings" description="Manage your business details and invoice defaults." action={serverMode ? <button className="button button-primary" onClick={onSave}>Save business settings</button> : undefined} />
+    <PageHeader eyebrow="MAKE IT YOURS" title="System Settings" description="Manage your business details, invoice defaults, subscription, and workspace preferences." action={serverMode ? <button className="button button-primary" onClick={onSave}>Save business settings</button> : undefined} />
     <div className="settings-layout">
       <nav className="settings-nav"><a className="settings-nav-active" href="#business">Business profile</a><a href="#invoicing">Invoicing</a><a href="#appearance">Appearance</a>{serverMode && <><a href="#account-security">Account security</a><a href="#invoice-templates">Invoice templates</a><a href="#business-administration">Branches and team</a><a href="#subscription">Subscription</a></>}<a href="#data">Workspace data</a></nav>
       <div className="settings-sections">

@@ -3,12 +3,12 @@ import { HttpError } from "./errors.js";
 
 const rolePermissions = {
   owner: new Set(["*"]),
-  admin: new Set(["business:read", "business:update", "users:manage", "customers:write", "products:write", "invoices:write", "payments:write", "reports:read", "audit:read"]),
-  finance_manager: new Set(["business:read", "customers:write", "products:write", "invoices:write", "payments:write", "reports:read", "audit:read"]),
-  accountant: new Set(["business:read", "customers:write", "products:write", "invoices:write", "payments:write", "reports:read", "audit:read"]),
+  admin: new Set(["business:read", "business:update", "users:manage", "customers:write", "products:write", "invoices:write", "payments:write", "suppliers:write", "expenses:write", "reports:read", "audit:read"]),
+  finance_manager: new Set(["business:read", "customers:write", "products:write", "invoices:write", "payments:write", "suppliers:write", "expenses:write", "reports:read", "audit:read"]),
+  accountant: new Set(["business:read", "customers:write", "products:write", "invoices:write", "payments:write", "suppliers:write", "expenses:write", "reports:read", "audit:read"]),
   sales_officer: new Set(["business:read", "customers:write", "products:write", "invoices:write", "reports:read"]),
   cashier: new Set(["business:read", "payments:write", "payments:read", "invoices:read"]),
-  auditor: new Set(["business:read", "customers:read", "products:read", "invoices:read", "payments:read", "reports:read", "audit:read"]),
+  auditor: new Set(["business:read", "customers:read", "products:read", "invoices:read", "payments:read", "suppliers:read", "expenses:read", "reports:read", "audit:read"]),
 };
 
 export function requireAuth(request, _response, next) {
