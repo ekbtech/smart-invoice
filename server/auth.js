@@ -5,7 +5,7 @@ import { rateLimit } from "express-rate-limit";
 import { z } from "zod";
 import { config } from "./config.js";
 import { pool, inTransaction } from "./db.js";
-import { loginSchema, registerSchema } from "./domain.js";
+import { loginSchema } from "./domain.js";
 import { HttpError } from "./errors.js";
 import { createTotpSecret, createTotpUri, decryptMfaSecret, encryptMfaSecret, verifyTotp } from "./mfa.js";
 
@@ -16,13 +16,6 @@ const loginAttempts = rateLimit({
   standardHeaders: "draft-8",
   legacyHeaders: false,
   message: { error: { code: "LOGIN_RATE_LIMIT", message: "Too many sign-in attempts. Try again later." } },
-});
-const registrationAttempts = rateLimit({
-  windowMs: 60 * 60 * 1000,
-  limit: 5,
-  standardHeaders: "draft-8",
-  legacyHeaders: false,
-  message: { error: { code: "REGISTRATION_RATE_LIMIT", message: "Too many account creation attempts. Try again later." } },
 });
 const mfaAttempts = rateLimit({
   windowMs: 10 * 60 * 1000,
@@ -102,48 +95,8 @@ async function getMemberships(userId) {
   return rows;
 }
 
-router.post("/register", registrationAttempts, async (request, response) => {
-  const input = registerSchema.parse(request.body);
-  const [existing] = await pool.execute("SELECT id FROM users WHERE email = ? LIMIT 1", [input.email]);
-  if (existing.length) throw new HttpError(409, "EMAIL_IN_USE", "An account with that email already exists.");
-
-  const userId = randomUUID();
-  const tenantId = randomUUID();
-  const passwordHash = await bcrypt.hash(input.password, 12);
-  const session = await inTransaction(async (connection) => {
-    await connection.execute(
-      "INSERT INTO tenants (id, name, email, phone, address, kra_pin) VALUES (?, ?, ?, ?, ?, ?)",
-      [tenantId, input.businessName, input.email, input.phone || null, input.address || null, input.kraPin || null],
-    );
-    await connection.execute(
-      "INSERT INTO users (id, email, full_name, password_hash) VALUES (?, ?, ?, ?)",
-      [userId, input.email, input.fullName, passwordHash],
-    );
-    await connection.execute(
-      "INSERT INTO memberships (tenant_id, user_id, role) VALUES (?, ?, 'owner')",
-      [tenantId, userId],
-    );
-    await connection.execute(
-      "INSERT INTO branches (id, tenant_id, name, address, phone, is_default) VALUES (?, ?, 'Main branch', ?, ?, TRUE)",
-      [randomUUID(), tenantId, input.address || null, input.phone || null],
-    );
-    await connection.execute(
-      `INSERT INTO subscriptions (id, tenant_id, plan_id, status, trial_ends_at)
-       SELECT ?, ?, id, 'trialing', DATE_ADD(UTC_TIMESTAMP(3), INTERVAL 14 DAY)
-       FROM subscription_plans WHERE code = 'starter'`,
-      [randomUUID(), tenantId],
-    );
-    return createSession(connection, userId, tenantId);
-  });
-
-  setSessionCookie(response, session.token, session.expiresAt);
-  response.status(201).json({
-    data: {
-      user: { id: userId, email: input.email, fullName: input.fullName },
-      tenants: [{ id: tenantId, name: input.businessName, currency: "KES", role: "owner" }],
-      activeTenantId: tenantId,
-    },
-  });
+router.post("/register", (_request, _response, next) => {
+  next(new HttpError(403, "ADMIN_ACCOUNT_CREATION_ONLY", "Self-registration is disabled. Ask the platform administrator to create your account."));
 });
 
 router.post("/login", loginAttempts, async (request, response) => {
@@ -345,50 +298,6 @@ router.post("/businesses", async (request, response) => {
   });
   response.status(201).json({
     data: { id: tenantId, name: input.businessName, currency: "KES", role: "owner" },
-  });
-});
-
-router.post("/accept-invitation", async (request, response) => {
-  if (!request.auth) throw new HttpError(401, "AUTH_REQUIRED", "Sign in before accepting a business invitation.");
-  const { token } = z.object({ token: z.string().regex(/^[A-Za-z0-9_-]{40,60}$/) }).parse(request.body);
-  const [rows] = await pool.execute(
-    `SELECT id, tenant_id, invited_email, role FROM membership_invitations
-     WHERE token_hash = ? AND accepted_at IS NULL AND expires_at > UTC_TIMESTAMP(3)
-     LIMIT 1`,
-    [hashToken(token)],
-  );
-  const invitation = rows[0];
-  if (!invitation) throw new HttpError(404, "INVITATION_NOT_FOUND", "This invitation is invalid or has expired.");
-  if (invitation.invited_email.toLowerCase() !== request.auth.email.toLowerCase()) {
-    throw new HttpError(403, "INVITATION_EMAIL_MISMATCH", "Sign in with the email address this invitation was sent to.");
-  }
-  await inTransaction(async (connection) => {
-    const [locked] = await connection.execute(
-      `SELECT id, tenant_id, invited_email, role FROM membership_invitations
-       WHERE id = ? AND accepted_at IS NULL AND expires_at > UTC_TIMESTAMP(3) FOR UPDATE`,
-      [invitation.id],
-    );
-    if (!locked.length) throw new HttpError(409, "INVITATION_ALREADY_USED", "This invitation has already been accepted.");
-    await connection.execute(
-      `INSERT INTO memberships (tenant_id, user_id, role, active) VALUES (?, ?, ?, TRUE)
-       ON DUPLICATE KEY UPDATE role = VALUES(role), active = TRUE`,
-      [invitation.tenant_id, request.auth.userId, invitation.role],
-    );
-    await connection.execute(
-      "UPDATE membership_invitations SET accepted_at = UTC_TIMESTAMP(3) WHERE id = ?",
-      [invitation.id],
-    );
-    await connection.execute(
-      "UPDATE sessions SET active_tenant_id = ? WHERE id = ?",
-      [invitation.tenant_id, request.auth.sessionId],
-    );
-  });
-  const memberships = await getMemberships(request.auth.userId);
-  response.json({
-    data: {
-      activeTenantId: invitation.tenant_id,
-      tenants: memberships.map(({ id, name, currency, role }) => ({ id, name, currency, role })),
-    },
   });
 });
 

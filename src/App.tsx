@@ -70,25 +70,6 @@ const quickNavigation: { label: string; view: View }[] = [
 const colorNames = ["violet", "green", "pink", "blue"];
 const statuses: StatusFilter[] = ["All", "Paid", "Pending", "Overdue", "Draft", "Void"];
 
-async function acceptPendingInvitation(session: Session) {
-  const token = new URLSearchParams(window.location.search).get("invite");
-  if (!token) return session;
-  const result = await apiRequest<{ activeTenantId: string; tenants: Session["tenants"] }>("/auth/accept-invitation", {
-    method: "POST",
-    body: JSON.stringify({ token }),
-  });
-  const url = new URL(window.location.href);
-  url.searchParams.delete("invite");
-  window.history.replaceState({}, "", url);
-  return { ...session, activeTenantId: result.activeTenantId, tenants: result.tenants };
-}
-
-function clearPendingInvitation() {
-  const url = new URL(window.location.href);
-  url.searchParams.delete("invite");
-  window.history.replaceState({}, "", url);
-}
-
 function Avatar({ name, color }: { name: string; color: string }) {
   const initials = name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "").join("");
   return <span className={`avatar avatar-${color}`}>{initials}</span>;
@@ -205,20 +186,12 @@ function App() {
       }
       setWorkspaceLoading(true);
       try {
-        let acceptedSession = currentSession;
-        try {
-          acceptedSession = await acceptPendingInvitation(currentSession);
-        } catch (error) {
-          clearPendingInvitation();
-          if (!active) return;
-          showToast(error instanceof Error ? error.message : "Could not accept the business invitation.");
-        }
         const [workspace, platformAdmin] = await Promise.all([
           loadWorkspaceData(settings),
           apiRequest<{ isPlatformAdmin: boolean }>("/platform-admin/me"),
         ]);
         if (!active) return;
-        setSession(acceptedSession);
+        setSession(currentSession);
         setIsPlatformAdmin(platformAdmin.isPlatformAdmin);
         setSettings(workspace.settings);
         setCustomers(workspace.customers);
@@ -293,18 +266,11 @@ function App() {
         method: "POST",
         body: JSON.stringify({ tenantId: nextSession.activeTenantId }),
       });
-      let acceptedSession = nextSession;
-      try {
-        acceptedSession = await acceptPendingInvitation(nextSession);
-      } catch (error) {
-        clearPendingInvitation();
-        showToast(error instanceof Error ? error.message : "Could not accept the business invitation.");
-      }
       const [workspace, platformAdmin] = await Promise.all([
         loadWorkspaceData(settings),
         apiRequest<{ isPlatformAdmin: boolean }>("/platform-admin/me"),
       ]);
-      setSession(acceptedSession);
+      setSession(nextSession);
       setIsPlatformAdmin(platformAdmin.isPlatformAdmin);
       setSettings(workspace.settings);
       setCustomers(workspace.customers);
@@ -330,13 +296,6 @@ function App() {
     setInvoices(workspace.invoices);
     setPayments(workspace.payments);
     setQuotations(workspace.quotations);
-  }
-
-  async function chooseDemo() {
-    setSession(null);
-    setIsPlatformAdmin(false);
-    setMode("demo");
-    setAuthNotice("");
   }
 
   async function logout() {
@@ -724,7 +683,7 @@ function App() {
     mode === "checking" || workspaceLoading
       ? <div className="app-loading"><span className="loading-mark"><BriefcaseBusiness size={19} /></span><strong>{workspaceLoading ? "Loading your business…" : "Connecting to your workspace…"}</strong><span>Your records stay private to your business.</span></div>
       : mode === "auth" || mode === "unavailable"
-        ? <AuthPage onAuthenticated={activateSession} onUseDemo={() => void chooseDemo()} notice={mode === "unavailable" ? authNotice : undefined} />
+        ? <AuthPage onAuthenticated={activateSession} notice={mode === "unavailable" ? authNotice : undefined} />
         : <div className={`app-shell color-theme-${settings.colorTheme ?? "blue"} ${settings.lightMode ? "light-mode" : ""}`}>
       {sidebarOpen && <button className="mobile-backdrop" aria-label="Close navigation" onClick={() => setSidebarOpen(false)} />}
       <aside className={`sidebar ${sidebarOpen ? "sidebar-open" : ""} ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
@@ -816,7 +775,7 @@ function App() {
           {view === "Smart tools" && <SmartToolsPage invoices={invoices} payments={payments} currency={settings.currency} onInvoices={() => navigate("Invoices")} />}
           {view === "Security & Audit Logs" && mode === "server" && ["owner", "admin", "finance_manager", "accountant", "auditor"].includes(userRole) && <SecurityAuditPage email={session?.user.email ?? ""} />}
           {view === "Integrations" && mode === "server" && <IntegrationsPage />}
-          {view === "Staff & User Management" && mode === "server" && <><PageHeader eyebrow="PEOPLE & LOCATIONS" title="Staff & User Management" description="Manage business branches and invite or review team members." /><BusinessAdministration businessRole={userRole} /></>}
+          {view === "Staff & User Management" && mode === "server" && <><PageHeader eyebrow="PEOPLE & LOCATIONS" title="Staff & User Management" description="Manage business branches and workspace users. Only a business Admin can create accounts." /><BusinessAdministration businessRole={userRole} /></>}
           {view === "Platform admin" && isPlatformAdmin && <PlatformAdminPage />}
           {view === "Settings" && <SettingsPage settings={settings} serverMode={mode === "server"} userEmail={session?.user.email ?? ""} userRole={userRole} onChange={setSettings} onSave={async () => {
             if (settings.logoUrl && (![settings.businessName, settings.email, settings.phone, settings.address].every((value) => value.trim())

@@ -51,3 +51,11 @@ export function requirePermission(permission) {
     next();
   };
 }
+
+export function requireBusinessAdmin(request, _response, next) {
+  if (request.tenant?.role !== "admin") {
+    next(new HttpError(403, "BUSINESS_ADMIN_REQUIRED", "Only a business administrator can create user accounts."));
+    return;
+  }
+  next();
+}

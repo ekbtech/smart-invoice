@@ -1,17 +1,16 @@
 # Smart Invoice Pro
 
-Smart Invoice Pro is a small-business invoicing application with a React/TypeScript frontend and an Express/MySQL API. It supports browser-local demo mode as well as a server-backed workspace.
+Smart Invoice Pro is a small-business invoicing application with a React/TypeScript frontend and an Express/MySQL API. The installed desktop client opens a private, server-backed workspace and uses an application-style sign-in screen.
 
-## Run the browser demo
+## Run locally (after setup)
 
 ```powershell
 npm install
+npm run dev:api
 npm run dev
 ```
 
-Open the local URL printed by Vite. Demo data is stored in this browser and does not sync to the API.
-
-To use real business records, start the API and database, then choose **Switch to real account** from the demo workspace and sign in or create an account. The signed-in workspace loads and saves that business's MySQL records; it never copies the fictional local-demo customers, products, invoices, or payments. Use **Explore the local demo** only to return to the sample workspace.
+Open the local URL printed by Vite. Sign-in is required; self-registration and anonymous demo access are disabled. Only a business workspace member with the **Admin** role can create user accounts in that workspace. Platform-wide administrator access does not grant this permission.
 
 ## Run the API locally
 
@@ -44,17 +43,17 @@ Requirements: Node.js 22.12 or newer, npm, and Docker Desktop with its engine ru
 
 The Vite development server proxies `/api` requests to `http://localhost:3001`. The API listens on port 3001 by default.
 
-To securely create a platform-wide administrator from an interactive terminal, run:
+To securely create the initial platform administrator from an interactive terminal, run:
 
 ```powershell
 npm run admin:create
 ```
 
-The command prompts for the administrator name, email, workspace name, and password. Password input is hidden and never passed as a command-line argument or written to `.env`. For an existing account, the command verifies its current password before granting access; otherwise, it creates an owner account and a starter workspace. It adds the email to `PLATFORM_ADMIN_EMAILS` in `.env`. Restart the API after setup so it reloads the allowlist. Protect the terminal and server configuration as administrator credentials.
+The command prompts for the administrator name, email, workspace name, and password. Password input is hidden and never passed as a command-line argument or written to `.env`. For an existing account, the command verifies its current password before granting access; otherwise, it creates an initial business **Admin** account and a starter workspace. It adds the email to `PLATFORM_ADMIN_EMAILS` in `.env` for platform settings. Restart the API after setup so it reloads the allowlist. Workspace user creation is authorized by the business **Admin** role, not by platform administrator access. Protect the terminal and server configuration as administrator credentials.
 
 ## Implemented
 
-- Tenant-aware registration, login sessions, business creation, team invitations, role checks, and MFA setup, verification, recovery-code, and disable flows.
+- Business Admin-created workspace accounts, login sessions, business role checks, and MFA setup, verification, recovery-code, and disable flows. Public self-registration is disabled; platform administrator access alone cannot create workspace users.
 - Customer and product management, invoices and invoice numbering, issue/void workflows, partial payments, quotations and conversion, adjustment notes, branches, notifications, reports, and audit records.
 - Tenant-scoped supplier records and expense management, including edits, supplier archiving, expense voiding, input-VAT calculation, and audit events for record changes.
 - Period-based Tax Management reports for VAT collected (with proportional credit-note adjustments), input VAT recorded on expenses, and net VAT by currency, with downloadable CSV summaries.
@@ -65,7 +64,7 @@ The command prompts for the administrator name, email, workspace name, and passw
 - Proforma invoices with conversion into invoice drafts, and manageable invoice templates that can be selected for invoices and snapshotted when issued.
 - Business profile logo (PNG/JPEG, up to 2 MB) or complete letterhead (single-page PDF, PNG, or JPEG, up to 5 MB) uploads; the two are mutually exclusive. Invoice, receipt, and delivery-note PDFs use the selected branding. Logo use requires business name, email, phone, and address; a complete letterhead can be used without entering those details.
 - Delivery notes created after an invoice is issued, with delivered quantities, recipient and address, delivery date, notes, and printable signature fields.
-- Settings screens for branches and team invitations/removal, invitation-link acceptance after sign-in, and per-business member permission controls.
+- Settings screens for branches and team access review/removal. Only the workspace Admin role can create user accounts within that business.
 - Recurring invoice schedules with weekly/monthly/quarterly/yearly dates, pause/resume, safe monthly date anchoring, and a MySQL-locking background worker that issues due invoices and records audit/notification entries.
 - Server-generated invoice PDFs and payment receipts, with tenant-scoped download routes; downloadable invoice, payment, outstanding-balance, and tax-summary CSV exports.
 - Subscription plan visibility, starter/professional/business/enterprise plan configuration, invoice and user caps, read-only access for expired/suspended subscriptions, and an environment-allowlisted platform administrator console for plans and subscription status.
@@ -74,7 +73,7 @@ The command prompts for the administrator name, email, workspace name, and passw
 - Streaming AES-256-GCM encrypted database backups, integrity verification before restore, and guarded restore into a newly migrated empty database.
 - A hardened Electron Windows desktop shell that loads a configured hosted HTTPS application and keeps the existing same-origin API architecture.
 - Integer-cent invoice calculations, tenant-scoped database relationships, and transaction-backed financial operations.
-- Browser-local demo mode and print-friendly invoice output.
+- Print-friendly invoice output.
 
 ## Not yet production-complete
 

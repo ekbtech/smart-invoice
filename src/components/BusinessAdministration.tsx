@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { Building2, Copy, UserMinus, Users } from "lucide-react";
+import { Building2, UserMinus, Users } from "lucide-react";
 import { apiRequest } from "../lib/api";
 
 type Branch = { id: string; name: string; address: string | null; phone: string | null; isDefault: boolean };
 type Member = { id: string; fullName: string; email: string; role: string; joinedAt: string };
-type Invitation = { id: string; email: string; role: string; expiresInDays: number; acceptPath: string };
-
-const inviteRoles = [
+const userRoles = [
   ["admin", "Administrator"],
   ["finance_manager", "Finance manager"],
   ["accountant", "Accountant"],
@@ -17,14 +15,16 @@ const inviteRoles = [
 
 export default function BusinessAdministration({ businessRole }: { businessRole: string }) {
   const canManageTeam = businessRole === "owner" || businessRole === "admin";
+  const canCreateUsers = businessRole === "admin";
   const canManageBranches = businessRole === "owner" || businessRole === "admin";
   const [branches, setBranches] = useState<Branch[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
+  const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<(typeof inviteRoles)[number][0]>("accountant");
+  const [password, setPassword] = useState("");
+  const [role, setRole] = useState<(typeof userRoles)[number][0]>("accountant");
   const [branchName, setBranchName] = useState("");
   const [branchAddress, setBranchAddress] = useState("");
-  const [invitation, setInvitation] = useState<Invitation | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -56,6 +56,29 @@ export default function BusinessAdministration({ businessRole }: { businessRole:
 
   useEffect(() => { void loadAdministration(); }, [loadAdministration]);
 
+  async function createUser(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setTeamError("");
+    setNotice("");
+    try {
+      await apiRequest<Member>("/users", {
+        method: "POST",
+        body: JSON.stringify({ fullName, email, password, role }),
+      });
+      setFullName("");
+      setEmail("");
+      setPassword("");
+      setRole("accountant");
+      setNotice("User account created. Share the sign-in details securely.");
+      await loadAdministration();
+    } catch (cause) {
+      setTeamError(cause instanceof Error ? cause.message : "Could not create this user account.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function createBranch(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
@@ -74,42 +97,6 @@ export default function BusinessAdministration({ businessRole }: { businessRole:
       setError(cause instanceof Error ? cause.message : "Could not add this branch.");
     } finally {
       setBusy(false);
-    }
-  }
-
-  async function createInvitation(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setBusy(true);
-    setTeamError("");
-    setNotice("");
-    try {
-      const created = await apiRequest<Invitation>("/users/invitations", {
-        method: "POST",
-        body: JSON.stringify({ email, role }),
-      });
-      setInvitation(created);
-      setEmail("");
-      setNotice("Invitation created. Copy the link and send it to the invited person.");
-    } catch (cause) {
-      setTeamError(cause instanceof Error ? cause.message : "Could not create this invitation.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function copyInvitation() {
-    if (!invitation) return;
-    try {
-      const token = new URL(invitation.acceptPath, window.location.origin).searchParams.get("token");
-      if (!token) throw new Error("The invitation link could not be created.");
-      const link = new URL(window.location.href);
-      link.search = "";
-      link.hash = "";
-      link.searchParams.set("invite", token);
-      await navigator.clipboard.writeText(link.toString());
-      setNotice("Invitation link copied. The invited person must sign in with the invited email address.");
-    } catch (cause) {
-      setTeamError(cause instanceof Error ? cause.message : "Could not copy the invitation link.");
     }
   }
 
@@ -159,11 +146,13 @@ export default function BusinessAdministration({ businessRole }: { businessRole:
               </li>)}
               {!members.length && !teamError && <li><span><small>No team members found.</small></span></li>}
             </ul>
-            {canManageTeam && <form className="admin-form" onSubmit={(event) => void createInvitation(event)}>
-              <label className="field"><span>Invite by email</span><input type="email" required maxLength={254} value={email} onChange={(event) => setEmail(event.target.value)} placeholder="teammate@example.com" /></label>
-              <label className="field"><span>Business role</span><select value={role} onChange={(event) => setRole(event.target.value as typeof role)}>{inviteRoles.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
-              <button className="button button-secondary" disabled={busy || !email.trim()}>{busy ? "Creating…" : "Create invitation"}</button>
-              {invitation && <button type="button" className="button button-quiet" onClick={() => void copyInvitation()}><Copy size={14} /> Copy invite link</button>}
+            {!canCreateUsers && <p className="admin-message">Only a business administrator can create user accounts.</p>}
+            {canCreateUsers && <form className="admin-form" onSubmit={(event) => void createUser(event)}>
+              <label className="field"><span>Full name</span><input required minLength={2} maxLength={160} value={fullName} onChange={(event) => setFullName(event.target.value)} /></label>
+              <label className="field"><span>Email address</span><input type="email" required maxLength={254} autoComplete="off" value={email} onChange={(event) => setEmail(event.target.value)} /></label>
+              <label className="field"><span>Initial password</span><input type="password" required minLength={4} maxLength={128} autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
+              <label className="field"><span>Business role</span><select value={role} onChange={(event) => setRole(event.target.value as typeof role)}>{userRoles.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
+              <button className="button button-secondary" disabled={busy || !fullName.trim() || !email.trim() || password.length < 4}>{busy ? "Creating…" : "Create user account"}</button>
             </form>}
           </section>
         </div>

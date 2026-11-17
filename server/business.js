@@ -1,16 +1,16 @@
 import { randomUUID } from "node:crypto";
-import { createHash, randomBytes } from "node:crypto";
+import bcrypt from "bcryptjs";
 import express, { Router } from "express";
 import { z } from "zod";
 import { writeAudit } from "./audit.js";
 import { pool, inTransaction } from "./db.js";
-import { calculateExpenseTax, calculateInvoice, createInvoiceSchema, customerSchema, expenseSchema, paymentSchema, productSchema, supplierSchema, tenantSettingsSchema } from "./domain.js";
+import { businessUserSchema, calculateExpenseTax, calculateInvoice, createInvoiceSchema, customerSchema, expenseSchema, paymentSchema, productSchema, supplierSchema, tenantSettingsSchema } from "./domain.js";
 import { HttpError } from "./errors.js";
 import { detectLetterheadMimeType, detectLogoMimeType } from "./branding.js";
 import { createDeliveryNotePdf, createInvoicePdf, createReceiptPdf } from "./pdf.js";
 import { addDays } from "./recurring-domain.js";
-import { assertInvoiceCapacity, assertUserCapacity, requirePlanFeature } from "./subscriptions.js";
-import { requirePermission } from "./tenant.js";
+import { assertInvoiceCapacity, requirePlanFeature } from "./subscriptions.js";
+import { requireBusinessAdmin, requirePermission } from "./tenant.js";
 
 const router = Router();
 const uuidSchema = z.string().uuid();
@@ -1422,44 +1422,29 @@ router.get("/users", requirePermission("users:manage"), async (request, response
   response.json({ data: rows, meta: { limit, offset } });
 });
 
-router.post("/users/invitations", requirePermission("users:manage"), async (request, response) => {
-  const input = z.object({
-    email: z.string().trim().email().max(254).transform((value) => value.toLowerCase()),
-    role: z.enum(["admin", "finance_manager", "accountant", "sales_officer", "cashier", "auditor"]),
-  }).parse(request.body);
-  const [alreadyMember] = await pool.execute(
-    `SELECT 1 FROM memberships m INNER JOIN users u ON u.id = m.user_id
-     WHERE m.tenant_id = ? AND m.active = TRUE AND u.email = ? LIMIT 1`,
-    [request.tenant.id, input.email],
-  );
-  if (alreadyMember.length) throw new HttpError(409, "ALREADY_A_MEMBER", "This person already belongs to the business.");
-  const token = randomBytes(32).toString("base64url");
+router.post("/users", requireBusinessAdmin, async (request, response) => {
+  const input = businessUserSchema.parse(request.body);
+  const passwordHash = await bcrypt.hash(input.password, 12);
   const id = randomUUID();
   await inTransaction(async (connection) => {
-    await assertUserCapacity(connection, request.tenant.id, request.isPlatformAdmin);
+    await assertUserCapacity(connection, request.tenant.id);
+    const [existing] = await connection.execute("SELECT id FROM users WHERE email = ? LIMIT 1", [input.email]);
+    if (existing.length) throw new HttpError(409, "EMAIL_IN_USE", "An account with that email already exists.");
     await connection.execute(
-      `UPDATE membership_invitations SET expires_at = UTC_TIMESTAMP(3)
-       WHERE tenant_id = ? AND invited_email = ? AND accepted_at IS NULL AND expires_at > UTC_TIMESTAMP(3)`,
-      [request.tenant.id, input.email],
+      "INSERT INTO users (id, email, full_name, password_hash) VALUES (?, ?, ?, ?)",
+      [id, input.email, input.fullName, passwordHash],
     );
     await connection.execute(
-      `INSERT INTO membership_invitations (id, tenant_id, invited_email, role, token_hash, invited_by, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, DATE_ADD(UTC_TIMESTAMP(3), INTERVAL 7 DAY))`,
-      [id, request.tenant.id, input.email, input.role, createHash("sha256").update(token).digest(), request.auth.userId],
+      "INSERT INTO memberships (tenant_id, user_id, role) VALUES (?, ?, ?)",
+      [request.tenant.id, id, input.role],
     );
     await writeAudit(connection, {
-      tenantId: request.tenant.id, userId: request.auth.userId, action: "membership.invitation_created",
-      entityType: "membership_invitation", entityId: id, details: { email: input.email, role: input.role },
+      tenantId: request.tenant.id, userId: request.auth.userId, action: "membership.user_created",
+      entityType: "membership", entityId: id, details: { email: input.email, role: input.role },
     });
   });
   response.status(201).json({
-    data: {
-      id,
-      email: input.email,
-      role: input.role,
-      expiresInDays: 7,
-      acceptPath: `/accept-invitation?token=${encodeURIComponent(token)}`,
-    },
+    data: { id, email: input.email, fullName: input.fullName, role: input.role },
   });
 });
 

@@ -1,16 +1,20 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { calculateExpenseTax, calculateInvoice, createInvoiceSchema, expenseSchema, registerSchema, supplierSchema } from "./domain.js";
+import { businessUserSchema, calculateExpenseTax, calculateInvoice, createInvoiceSchema, expenseSchema, registerSchema, supplierSchema } from "./domain.js";
 
-test("register accepts a four-character password and normalizes email", () => {
+test("business admin-created accounts accept a four-character password and normalize email", () => {
   const input = {
-    businessName: "Lumina Studio",
     fullName: "Evans Kimani",
     email: "  EVANS@example.com ",
     password: "1234",
+    role: "accountant",
   };
-  assert.equal(registerSchema.parse(input).email, "evans@example.com");
-  assert.equal(registerSchema.safeParse({ ...input, password: "123" }).success, false);
+  assert.equal(businessUserSchema.parse(input).email, "evans@example.com");
+  assert.equal(businessUserSchema.safeParse({ ...input, password: "123" }).success, false);
+  assert.equal(businessUserSchema.safeParse({ ...input, role: "owner" }).success, false);
+  assert.equal(registerSchema.safeParse({
+    businessName: "Lumina Studio", fullName: input.fullName, email: input.email, password: input.password,
+  }).success, true);
 });
 
 test("invoice calculation uses integer cents and configured VAT", () => {

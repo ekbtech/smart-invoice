@@ -185,7 +185,7 @@ export default function PlatformAdminPage() {
     </section>
 
     <section className="panel platform-admin-section">
-      <div className="panel-heading"><div><h2>Administrator audit</h2><p>Recent plan and subscription changes.</p></div><Activity size={18} /></div>
+      <div className="panel-heading"><div><h2>Administrator audit</h2><p>Recent account, plan, and subscription changes.</p></div><Activity size={18} /></div>
       {audit.length === 0 ? <p className="settings-note"><CircleHelp size={15} /> No administrator changes have been recorded yet.</p> : <div className="platform-audit-list">{audit.map((entry) => <div key={entry.id}><strong>{entry.action.replaceAll(".", " ")}</strong><span>{entry.entityType} · {entry.adminEmail} · {showDate(entry.createdAt)}</span></div>)}</div>}
     </section>
   </>;

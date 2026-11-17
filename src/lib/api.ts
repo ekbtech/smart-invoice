@@ -31,7 +31,7 @@ export async function apiRequest<T>(path: string, options: RequestInit = {}): Pr
       credentials: "include",
     });
   } catch {
-    throw new ApiError("The API server is unavailable. Start MySQL and the API, or use the local demo.", 0, "API_UNAVAILABLE");
+    throw new ApiError("The API server is unavailable. Check your connection or contact the system administrator.", 0, "API_UNAVAILABLE");
   }
   if (response.status === 204) return undefined as T;
   let body: { data?: T; error?: { code?: string; message?: string } };

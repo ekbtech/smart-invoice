@@ -136,7 +136,7 @@ async function createWorkspace(connection, input, userId, createUser, passwordHa
     );
   }
   await connection.execute(
-    "INSERT INTO memberships (tenant_id, user_id, role) VALUES (?, ?, 'owner')",
+    "INSERT INTO memberships (tenant_id, user_id, role) VALUES (?, ?, 'admin')",
     [tenantId, userId],
   );
   await connection.execute(
@@ -191,7 +191,7 @@ async function main() {
   const fullName = await askLine("Administrator full name: ");
   const email = await askLine("Administrator email: ");
   const businessName = await askLine("Admin workspace name [Platform Admin Workspace]: ");
-  const password = await askSecret("Password (12+ characters): ");
+  const password = await askSecret("Password (4+ characters): ");
   const confirmation = await askSecret("Confirm password: ");
   if (password !== confirmation) throw new Error("The passwords did not match. Nothing was changed.");
 
@@ -206,8 +206,8 @@ async function main() {
   try {
     const allowlistChanged = await saveAdminAllowlist(input.email);
     console.log(`\nPlatform administrator access is configured for ${input.email}.`);
-    console.log(result.createdAccount ? "A new account and admin workspace were created." : result.createdWorkspace
-      ? "The existing account was verified and an admin workspace was created."
+    console.log(result.createdAccount ? "A new account with the business Admin role and its workspace were created." : result.createdWorkspace
+      ? "The existing account was verified and a workspace with the business Admin role was created."
       : "The existing account was verified; its existing workspaces were left unchanged.");
     if (allowlistChanged) console.log("Restart the API so it reloads the updated .env allowlist.");
     else console.log("The API must be started with this email in PLATFORM_ADMIN_EMAILS.");
